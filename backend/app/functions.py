@@ -45,17 +45,17 @@ class DB:
     # LAB 4 FUNCTIONS  #
     ####################
 
-    # 1. FUNCTION TO INSERT DATA INTO THE RADAR COLLECTION
-    def insertData(self, data):
-        ''' Insert data into the radar collection '''
+   # 1. FUNCTION TO INSERT DATA INTO THE RADAR COLLECTION
+    def insert_data(self, data):
+        '''Insert data into the radar collection'''
         try:
-            remotedb = self.remoteMongo(
-                'mongodb://%s:%s@%s:%s' % (self.username, self.password, self.server, self.port), 
+            remotedb = self.remote_mongo(
+                f'mongodb://{self.username}:{self.password}@{self.server}:{self.port}', 
                 tls=self.tls
             )
             result = remotedb.ELET2415.radar.insert_one(data)
         except Exception as e:
-            print("insertData Error:", str(e))    
+            print(f"insert_data error: {e}")    
             return None
         return result
 
@@ -63,11 +63,10 @@ class DB:
     def retrieve_radar(self, start, end):
         '''Retrieves documents from the 'radar' collection within the specified date range'''
         try:
-            start = int(start)
-            end = int(end)
+            start, end = int(start), int(end)
 
-            remotedb = self.remoteMongo(
-                'mongodb://%s:%s@%s:%s' % (self.username, self.password, self.server, self.port), 
+            remotedb = self.remote_mongo(
+                f'mongodb://{self.username}:{self.password}@{self.server}:{self.port}', 
                 tls=self.tls
             )
             result = remotedb.ELET2415.radar.find(
@@ -75,7 +74,7 @@ class DB:
                 {"_id": 0, "timestamp": 1, "reserve": 1, "waterheight": 1}
             )
         except Exception as e:
-            print(f"retrieve_radar() error: {e}")
+            print(f"retrieve_radar error: {e}")
             return None
         return result
 
@@ -83,11 +82,10 @@ class DB:
     def average_radar(self, start, end):
         '''Computes the arithmetic average on the 'reserve' field'''
         try:
-            start = int(start)
-            end = int(end)
+            start, end = int(start), int(end)
 
-            remotedb = self.remoteMongo(
-                'mongodb://%s:%s@%s:%s' % (self.username, self.password, self.server, self.port), 
+            remotedb = self.remote_mongo(
+                f'mongodb://{self.username}:{self.password}@{self.server}:{self.port}', 
                 tls=self.tls
             )
             result = remotedb.ELET2415.radar.aggregate([
@@ -96,34 +94,32 @@ class DB:
                 {"$project": {"_id": 0, "average": 1}}
             ])
         except Exception as e:
-            print(f"average_radar() error: {e}")
+            print(f"average_radar error: {e}")
             return None
         return result
 
     # 4. FUNCTION TO INSERT/UPDATE PASSCODE IN THE 'code' COLLECTION
-    def setPass(self, passcode):
-        ''' Update the document in the 'code' collection with the new passcode '''
+    def set_pass(self, passcode):
+        '''Update the document in the 'code' collection with the new passcode'''
         passcode = str(passcode)
         try:
-            remotedb = self.remoteMongo(
-                'mongodb://%s:%s@%s:%s' % (self.username, self.password, self.server, self.port), 
+            remotedb = self.remote_mongo(
+                f'mongodb://{self.username}:{self.password}@{self.server}:{self.port}', 
                 tls=self.tls
             )
 
-            # Ensure collection access is correct
-            collection = remotedb.ELET2415.code  # Change ELET2415 if needed
+            collection = remotedb.ELET2415.code  # Ensure collection access is correct
 
-            # Update or insert the document
             item = collection.find_one_and_update(
-                {"type": "passcode"},  # Only update the passcode document
-                {"$set": {"code": passcode}}, 
-                upsert=True, 
-                projection={"_id": False}, 
-                return_document=self.ReturnDocument.AFTER  # Returns updated document
+                {"type": "passcode"},
+                {"$set": {"code": passcode}},
+                upsert=True,
+                projection={"_id": False},
+                return_document=self.ReturnDocument.AFTER
             )
 
         except Exception as e:
-            print("setPass Error:", str(e))
+            print(f"set_pass error: {e}")
             return None
         return item  
 
@@ -133,13 +129,13 @@ class DB:
         try:
             passcode = str(passcode)
 
-            remotedb = self.remoteMongo(
-                'mongodb://%s:%s@%s:%s' % (self.username, self.password, self.server, self.port), 
+            remotedb = self.remote_mongo(
+                f'mongodb://{self.username}:{self.password}@{self.server}:{self.port}', 
                 tls=self.tls
             )
             result = remotedb.ELET2415.code.count_documents({"code": passcode})
         except Exception as e:
-            print(f"count_passcodes() error: {e}")
+            print(f"count_passcodes error: {e}")
             return None
         return result
 
