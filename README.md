@@ -1,7 +1,7 @@
 # Internet of Things (IoT) Template - Home Automation and Analysis
 
 ### Description
-The Hardware component has two tasks: (1) Implement a remote authentication sub-system as part of a remote weather Station. This enables home owners to remotely monitor weather condition in their home. 
+The Hardware component has two tasks: (1) Implement a remote weather Station. This enables home owners to remotely monitor weather condition in their home. 
 
 The Backend component also has two tasks: (1) Store data sent via MQTT POST request from the ESP32 in a database. This database should adhere to a specified schema. (2) Facilitate the access of stored data by the hardware and frontend. This should be accomplished through the implementation of API routes on the frontend and HTTP GET request from the hardware (ESP32) component.
 
