@@ -3,26 +3,25 @@
 //##                                                                                                              ##
 //##################################################################################################################
 
- 
-
-// IMPORT ALL REQUIRED LIBRARIES
-#include <rom/rtc.h>
-#include <ArduinoJson.h>
-
+// LIBRARY IMPORTS
+#include <rom/rtc.h> 
+#include <math.h>  // https://www.tutorialspoint.com/c_standard_library/math_h.htm 
+#include <ctype.h>
 #include <SPI.h>
 #include "Adafruit_GFX.h"
 #include "Adafruit_ILI9341.h"
+#include <Wire.h>
+#include <Adafruit_BMP280.h>
+#include "DHT.h"
 
+//############### IMPORT HEADER FILES ##################
 
-
-//IMPORT IMAGES
-#include "lockclose.h"
-#include "lockopen.h"
-
+#ifndef FORECAST_H
+#include "foreCast.h"
+#endif
 
 #ifndef _WIFI_H 
 #include <WiFi.h>
-#include <HTTPClient.h>
 #endif
 
 #ifndef STDLIB_H
@@ -37,63 +36,67 @@
 #include <Arduino.h>
 #endif 
  
+#ifndef ARDUINOJSON_H
+#include <ArduinoJson.h>
+#endif
 
+ 
+// DEFINE AND INITIALISE VARIABLES
+#define ARDUINOJSON_USE_DOUBLE      1 
 
-// DEFINE VARIABLES
-#define analogPin 34 
-#define BTN1      25
-#define BTN2      26
-#define BTN3      27
+// DEFINE THE CONTROL PINS FOR SOIL MOISTURE SENSOR
+#define soil_m    32
 
-//i was here
-#define TFT_DC    17
+// DEFINE THE CONTROL PINS FOR TFT DISPLAY
+#define TFT_DC    2
 #define TFT_CS    5
-#define TFT_RST   16
+#define TFT_RST   4
 #define TFT_CLK   18
 #define TFT_MOSI  23
 #define TFT_MISO  19
-
-#define BOX_WIDTH 50
-#define BOX_HEIGHT 50
-#define SPACING 5
-#define MARGIN 10
-
-uint8_t currentDigit = 1; // Digit being modified by the potentiometer 
-bool lockState = false; // State of the lock
-
-unsigned char d1 = 0;
-unsigned char d2 = 0;
-unsigned char d3 = 0;
-unsigned char d4 = 0;
-
-
 
 // IMPORT FONTS FOR TFT DISPLAY
 #include <Fonts/FreeSansBold18pt7b.h>
 #include <Fonts/FreeSansBold9pt7b.h> 
 
- 
+// DEFINE COLOURS FOR TFT
+#define BLACK   0x0000
+#define BLUE    0x001F
+#define RED     0xF800
+#define GREEN   0x07E0
+#define CYAN    0x07FF
+#define MAGENTA 0xF81F
+#define YELLOW  0xFFE0
+#define WHITE   0xFFFF
+
+// DEFINE THE CONTROL PINS FOR THE DHT22 
+#define DHTPIN 17
+#define DHTTYPE DHT22
+
+// DEFINE THE CONTROL PINS FOR THE BMP280
+#define BMP_SCK  (13)
+#define BMP_MISO (12)
+#define BMP_MOSI (11)
+#define BMP_CS   (10)
 
 
 // MQTT CLIENT CONFIG  
 static const char* pubtopic      = "620160532";                    // Add your ID number here
 static const char* subtopic[]    = {"620160532_sub","/elet2415"};  // Array of Topics(Strings) to subscribe to
-static const char* mqtt_server   = "broker.emqx.io";         // Broker IP address or Domain name as a String 
+static const char* mqtt_server   = "broker.emqx.io";         // Broker IP address or Domain name as a String
+
 static uint16_t mqtt_port        = 1883;
 
 // WIFI CREDENTIALS
-const char* ssid       = "MonaConnect"; // Add your Wi-Fi ssid
-const char* password   = ""; // Add your Wi-Fi password 
-
-
+const char* ssid       = "MonaConnect";     // Add your Wi-Fi ssid
+const char* password   = "";    // Add your Wi-Fi password 
 
 // TASK HANDLES 
 TaskHandle_t xMQTT_Connect          = NULL; 
 TaskHandle_t xNTPHandle             = NULL;  
 TaskHandle_t xLOOPHandle            = NULL;  
 TaskHandle_t xUpdateHandle          = NULL;
-TaskHandle_t xButtonCheckeHandle    = NULL; 
-
+TaskHandle_t xButtonCheckeHandle    = NULL;   
 
 // FUNCTION DECLARATION   
 void checkHEAP(const char* Name);   // RETURN REMAINING HEAP SIZE FOR A TASK
@@ -103,19 +106,14 @@ void callback(char* topic, byte* payload, unsigned int length);
 void initialize(void);
 bool publish(const char *topic, const char *payload); // PUBLISH MQTT MESSAGE(PAYLOAD) TO A TOPIC
 void vButtonCheck( void * pvParameters );
-void vUpdate( void * pvParameters ); 
-
-void digit1(uint8_t number);
-void digit2(uint8_t number);
-void digit3(uint8_t number);
-void digit4(uint8_t number);
-
-void checkPasscode(void);
-void showLockState(void);
-
+void vUpdate( void * pvParameters );
  
 
-//############### IMPORT HEADER FILES ##################
+/* Declare your functions below */ 
+void display();
+double calcHeatIndex(double t, double h);
+double calcSoilValue();
+
 #ifndef NTP_H
 #include "NTP.h"
 #endif
@@ -124,136 +122,139 @@ void showLockState(void);
 #include "mqtt.h"
 #endif
 
+/* Init class Instances for the DHT22 etcc */
+DHT dht(DHTPIN, DHTTYPE);  
+
+double h;   //humidity read by the DHT sensor
+double t;   //temperature read by the DHT sensor
+double bt;  //temperature read by the BMP sensor
+int conVal; //value of the soil moisture sensor readings after conversion
+int soilVal;//value of soil moisture before conversion
+double hI;  //heat index calculated using temperature and humidity
 
 /* Initialize class objects*/
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_MOSI, TFT_CLK, TFT_RST, TFT_MISO);
-
-
-
- 
- 
-/* Declare your functions below */
-
-
+Adafruit_BMP280 bmp;
 
 void setup() {
-    Serial.begin(115200);  // INIT SERIAL  
-     
-    /* TFT DISPLAY SET UP */
-    tft.begin();
-    tft.fillScreen(ILI9341_WHITE);
-    tft.setTextColor(ILI9341_DARKGREY);
-    tft.setTextSize(1);
+  Serial.begin(115200);  // INIT SERIAL   
 
-  /* ENABLE PULL-UP RESISTORS */
-    pinMode(BTN1,INPUT_PULLUP);
-    pinMode(BTN2,INPUT_PULLUP);
-    pinMode(BTN3,INPUT_PULLUP);
-  
+  // INITIALIZE ALL SENSORS AND DEVICES
+  /* TFT DISPLAY SET UP */
+  tft.begin();
+  tft.fillScreen(ILI9341_WHITE);
+  tft.setTextColor(ILI9341_BLACK);
+  tft.setTextSize(1);
 
-  
-    
- 
-  /* Configure all others here */
-
-  initialize();           // INIT WIFI, MQTT & NTP 
-
-  /*DISPLAY 0 ON START UP*/
-  digit1(0);
-  digit2(0);
-  digit3(0);
-  digit4(0);
-
-  vButtonCheckFunction(); // UNCOMMENT IF USING BUTTONS THEN ADD LOGIC FOR INTERFACING WITH BUTTONS IN THE vButtonCheck FUNCTION
-
+  /* Add all other necessary sensor Initializations and Configurations here */
+  dht.begin();
+  Wire.begin(21, 22);
+  bmp.begin(0x76);
+  pinMode(DHTPIN, INPUT);
+  pinMode(soil_m, INPUT);
+  initialize();     // INIT WIFI, MQTT & NTP 
+  // vButtonCheckFunction(); // UNCOMMENT IF USING BUTTONS INT THIS LAB, THEN ADD LOGIC FOR INTERFACING WITH BUTTONS IN THE vButtonCheck FUNCTION
 }
   
 
 
 void loop() {
-  // put your main code here, to run repeatedly: 
-  
-  int value = map(analogRead(analogPin),0,4096,0,10);
+  // put your main code here, to run repeatedly:
+  // vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-  if(currentDigit == 1){
-    digit1(value);
-    d1 = value;
-  }
+  Serial.println("***************My Weather Station****************");
+  t = dht.readTemperature();
+  Serial.print(F("DHT Temperature: "));
+  Serial.print(t);
+  Serial.println(" *C");
 
-  if(currentDigit == 2){
-    digit2(value);
-    d2 = value;
-  }
-  
-  if(currentDigit == 3){
-    digit3(value);
-    d3 = value;
-  }
+  Serial.print(F("BMP Temperature = "));
+  Serial.print(bmp.readTemperature());
+  Serial.println(" *C");
 
-  if(currentDigit == 4){
-    digit4(value);
-    d4 = value;
-  }
+  h = dht.readHumidity();
+  Serial.print("Humidity =  ");
+  Serial.print(h);
+  Serial.println("%");
+          
+  hI = calcHeatIndex(t, h);
+  Serial.print("Heat Index =  ");
+  Serial.println(hI);
 
- 
+  conVal = calcSoilValue();
+  Serial.print(F("Soil Moisture = "));
+  Serial.print(conVal);
+  Serial.println("%");
 
-  vTaskDelay(1000 / portTICK_PERIOD_MS);  
+  Serial.print(F("Pressure = "));
+  Serial.print(bmp.readPressure()/100);
+  Serial.println(" hPa");
+
+  Serial.print(F("Approx altitude = "));
+  Serial.print(bmp.readAltitude(1013.25)); /* Adjusted to local forecast! */
+  Serial.println(" m");
+
+  Serial.println("************************************************");
+  vTaskDelay(2000 / portTICK_PERIOD_MS);
+  display();
+
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
 }
 
 
-
-  
 //####################################################################
 //#                          UTIL FUNCTIONS                          #       
 //####################################################################
-void vButtonCheck( void * pvParameters )  {
-    configASSERT( ( ( uint32_t ) pvParameters ) == 1 );     
+// void vButtonCheck( void * pvParameters )  {
+//     configASSERT( ( ( uint32_t ) pvParameters ) == 1 );     
       
-    for( ;; ) {
-        // Add code here to check if a button(S) is pressed
-        // then execute appropriate function if a button is pressed  
-
-        // 1. Implement button1  functionality
-
-        if(!digitalRead(BTN1)){
-
-          if(currentDigit == 4){
-            currentDigit = 1;
-          }
-
-          else{
-            currentDigit++;
-          }
-          
-        }
-
-
-        // 2. Implement button2  functionality
-
-        if(!digitalRead(BTN2)){
-          checkPasscode();
-        }
-
-        // 3. Implement button3  functionality
-
-        if(!digitalRead(BTN3)){
-          lockState = false;
-          showLockState();
-        }
-       
-        vTaskDelay(200 / portTICK_PERIOD_MS);  
-    }
-}
+//     for( ;; ) {
+//         // Add code here to check if a button(S) is pressed
+//         // then execute appropriate function if a button is pressed 
+//         vTaskDelay(200 / portTICK_PERIOD_MS);  
+//     }
+// }
 
 void vUpdate( void * pvParameters )  {
     configASSERT( ( ( uint32_t ) pvParameters ) == 1 );    
- 
+           
     for( ;; ) {
-          // Task code goes here.   
-          // PUBLISH to topic every second.  
-            
-        vTaskDelay(1000 / portTICK_PERIOD_MS);  
-    }
+      // #######################################################
+      // ## This function must PUBLISH to topic every second. ##
+      // #######################################################
+   
+      double h = dht.readHumidity();
+      double t = dht.readTemperature();
+      double bt = bmp.readTemperature();
+      double p = bmp.readPressure();
+      double a = bmp.readAltitude(1013.25);
+
+      // 1. Create JSon object
+      StaticJsonDocument<1000> doc;
+      // 2. Create message buffer/array to store serialized JSON object
+      char message[1100]  = { 0 };
+      // 3. Add key:value pairs to JSon object based on above schema
+      doc["id"]                 = "620160532";
+      doc["timestamp"]          = getTimeStamp();
+      doc["celsTemperature"]    = t;
+      doc["fahrTemperature"]    = (t * 9.0/5.0) + 32;
+      doc["bmp_temp"]           = bt;
+      doc["humidity"]           = h;
+      doc["heatindex"]          = calcHeatIndex(t,h);
+      doc["soilMoisture"]       = calcSoilValue();
+      doc["pressure"]           = p;
+      doc["altitude"]           = a;
+
+      // 4. Seralize / Covert JSon object to JSon string and store in message array
+      serializeJson(doc, message); 
+      Serial.println(message);
+      // 5. Publish message to a topic subscribed to by both backend and frontend                
+      if(mqtt.connected()){
+        publish(pubtopic, message);
+      }
+      vTaskDelay(1000 / portTICK_PERIOD_MS); 
+    }  
+     
 }
 
 unsigned long getTimeStamp(void) {
@@ -279,178 +280,172 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
  
   // CONVERT MESSAGE TO JSON
+  StaticJsonDocument<1000> doc;
+  DeserializationError error = deserializeJson(doc, received);  
+
+  if (error) {
+    Serial.print("deserializeJson() failed: ");
+    Serial.println(error.c_str());
+    return;
+  }
 
 
   // PROCESS MESSAGE
+  const char* type = doc["type"]; 
 
+  if (strcmp(type, "sensors") == 0){
+    // 1. EXTRACT ALL PARAMETERS: NODES, RED,GREEN, BLUE, AND BRIGHTNESS FROM JSON OBJECT
+    int ctemp       = doc["celsTemperature"];
+    int ftemp       = doc["fahrTemperature"];
+    int btemp       = doc["bmp_temp"];
+    int humid       = doc["humidity"];
+    int heatIndex   = doc["heatindex"];
+    int soilmoist   = doc["soilMoisture"];
+    int pressure    = doc["pressure"];
+    int altitude    = doc["altitude"];
+  }
 }
 
 bool publish(const char *topic, const char *payload){   
-     bool res = false;
-     try{
-        res = mqtt.publish(topic,payload);
-        // Serial.printf("\nres : %d\n",res);
-        if(!res){
-          res = false;
-          throw false;
-        }
-     }
-     catch(...){
+    bool res = false;
+    try{
+      res = mqtt.publish(topic,payload);
+      // Serial.printf("\nres : %d\n",res);
+      if(!res){
+        res = false;
+        throw false;
+      }
+    }
+    catch(...){
       Serial.printf("\nError (%d) >> Unable to publish message\n", res);
-     }
+    }
   return res;
 }
 
-//***** Complete the util functions below ******
-  
-void digit1(uint8_t number){
-  // CREATE BOX AND WRITE NUMBER IN THE BOX FOR THE FIRST DIGIT
-  // 1. Set font to FreeSansBold18pt7b 
-  // 2. Draw a filled rounded rectangle close to the bottom of the screen. Give it any colour you like 
-  // 3. Set cursor to the appropriate coordinates in order to write the number in the middle of the box 
-  // 4. Set the text colour of the number. Use any colour you like 
-  // 5. Set font size to one 
-  // 6. Print number to the screen 
-  tft.setFont(&FreeSansBold18pt7b);
-  tft.fillRoundRect(MARGIN, tft.height() - BOX_HEIGHT - MARGIN, BOX_WIDTH, BOX_HEIGHT, 10, ILI9341_CYAN);
-  tft.setCursor(MARGIN + 15, tft.height() - BOX_HEIGHT + 25);
+
+
+// //***** Complete the util functions below ******
+
+void display(){
+  //Section to display the temperature value, Humidity, Soil Moisture in Percentage,Pressure, and Altitude on the TFT Display
+  tft.setRotation(1);
+  //tft.fillRect(0, 0, tft.width()-2, tft.height()-2, ILI9341_WHITE);
+
+  //RECTANGLE 1 - displays the temperatures read from the DHT22 and BMP280 sensors
+  tft.drawRect(1, 4, tft.width()-2, 72, ILI9341_GREEN);
+
+  tft.drawBitmap(3, 10, sun, 50, 50, ILI9341_YELLOW, ILI9341_WHITE);  //sun picture
+  tft.drawBitmap(260, 170, partlyCloudyDay, 50, 50, ILI9341_CYAN, ILI9341_WHITE); //partly cloudy picture
+
+  tft.setCursor(55, 23);
+  tft.setTextColor(ILI9341_DARKGREY, ILI9341_WHITE);
+  tft.setTextSize(2);
+  tft.println("DHT TEMP.");
+  tft.setCursor(55, 45);
+  tft.print(t);
   tft.setTextSize(1);
-  tft.print(number);
-}
- 
-void digit2(uint8_t number){
-  tft.setFont(&FreeSansBold18pt7b);
-  // Use MARGIN + (BOX_WIDTH + SPACING) for the x-coordinate
-  tft.fillRoundRect(MARGIN + (BOX_WIDTH + SPACING), tft.height() - BOX_HEIGHT - MARGIN, BOX_WIDTH, BOX_HEIGHT, 10, ILI9341_CYAN);
-  tft.setCursor(MARGIN + (BOX_WIDTH + SPACING) + 15, tft.height() - BOX_HEIGHT + 25);
+  tft.print("o");
+  tft.setTextSize(2);
+  tft.print("C");
+
+  tft.setCursor(195, 23);
+  tft.setTextColor(ILI9341_DARKGREY, ILI9341_WHITE);
+  tft.setTextSize(2);
+  tft.println("BMP TEMP.");
+  tft.setCursor(195, 45);
+  tft.print(bmp.readTemperature());
   tft.setTextSize(1);
-  tft.print(number);
-}
+  tft.print("o");
+  tft.setTextSize(2);
+  tft.print("C");
 
-void digit3(uint8_t number){
-  // CREATE BOX AND WRITE NUMBER IN THE BOX FOR THE THIRD DIGIT
-  // 1. Set font to FreeSansBold18pt7b 
-  // 2. Draw a filled rounded rectangle close to the bottom of the screen. Give it any colour you like 
-  // 3. Set cursor to the appropriate coordinates in order to write the number in the middle of the box 
-  // 4. Set the text colour of the number. Use any colour you like 
-  // 5. Set font size to one 
-  // 6. Print number to the screen 
+  //RECTANGLE 2 - displays the humidity reading from the DHT22
+  //            - displays the heat index calculated from the DHT22 humidity and temperature
+  //            - displays the pressure read from the BMP280 sensor
+  tft.drawRect(1, 76, tft.width()-2, 62, ILI9341_GREEN);
 
-  tft.setFont(&FreeSansBold18pt7b);
-  tft.fillRoundRect(MARGIN + 2 * (BOX_WIDTH + SPACING), tft.height() - BOX_HEIGHT - MARGIN, BOX_WIDTH, BOX_HEIGHT, 10, ILI9341_CYAN);
-  tft.setCursor(MARGIN + 2 * (BOX_WIDTH + SPACING) + 15, tft.height() - BOX_HEIGHT + 25);
+  tft.setCursor(5, 85);
+  tft.setTextColor(ILI9341_DARKGREY, ILI9341_WHITE);
+  tft.setTextSize(2);
+  tft.println("HUMIDITY");
+  tft.setCursor(5, 107);
+  tft.print(h);
+  tft.setTextSize(2);
+  tft.print("%");
+
+  tft.drawLine(105, 76, 105, 138, ILI9341_GREEN);
+
+  tft.setCursor(115, 85);
+  tft.setTextColor(ILI9341_DARKGREY, ILI9341_WHITE);
+  tft.setTextSize(2);
+  tft.println("H.I.");
+  tft.setCursor(115, 107);
+  tft.print(hI);
   tft.setTextSize(1);
-  tft.print(number);
+  tft.print("o");
+  tft.setTextSize(2);
+  tft.print("F");
+
+  tft.drawLine(192, 76, 192, 138, ILI9341_GREEN);
+
+  tft.setCursor(195, 85);
+  tft.setTextColor(ILI9341_DARKGREY, ILI9341_WHITE);
+  tft.setTextSize(2);
+  tft.println("PRESSURE");
+  tft.setCursor(195, 107);
+  tft.print(bmp.readPressure()/100);
+  tft.setTextSize(2);
+  tft.print(" hPa");
+
+  //RECTANGLE 3 - displays the soil moisture reading converted to percentage
+  //            - displays the approximated altitude
+  tft.drawRect(1, 138, tft.width()-2, 100, ILI9341_GREEN);
+
+  tft.setCursor(5, 150);
+  tft.setTextColor(ILI9341_DARKGREY, ILI9341_WHITE);
+  tft.setTextSize(2);
+  tft.print("SOIL MOISTURE: ");
+
+  // Clear the area where the soil moisture is displayed
+tft.fillRect(190, 150, 60, 30, ILI9341_WHITE); // adjust width and height as needed
+
+  tft.setCursor(190, 150);
+  tft.print(conVal);
+  tft.setTextSize(2);
+  tft.print("%");
+
+  tft.setCursor(5, 180);
+  tft.setTextColor(ILI9341_DARKGREY, ILI9341_WHITE);
+  tft.setTextSize(2);
+  tft.println("APPROX.");
+  tft.setCursor(5, 200);
+  tft.print("ALTITUDE: ");
+  tft.setCursor(140, 200);
+  tft.print(bmp.readAltitude(1013.25));
+  tft.setTextSize(2);
+  tft.print(" m");
 }
 
-void digit4(uint8_t number){
-  // CREATE BOX AND WRITE NUMBER IN THE BOX FOR THE FOURTH DIGIT
-  // 1. Set font to FreeSansBold18pt7b 
-  // 2. Draw a filled rounded rectangle close to the bottom of the screen. Give it any colour you like 
-  // 3. Set cursor to the appropriate coordinates in order to write the number in the middle of the box 
-  // 4. Set the text colour of the number. Use any colour you like 
-  // 5. Set font size to one 
-  // 6. Print number to the screen
+double calcHeatIndex(double t, double h){
+    // CALCULATE AND RETURN HEAT INDEX USING EQUATION FOUND AT https://byjus.com/heat-index-formula/#:~:text=The%20heat%20index%20formula%20is,an%20implied%20humidity%20of%2020%25
 
-  tft.setFont(&FreeSansBold18pt7b);
-  tft.fillRoundRect(MARGIN + 3 * (BOX_WIDTH + SPACING), tft.height() - BOX_HEIGHT - MARGIN, BOX_WIDTH, BOX_HEIGHT, 10, ILI9341_CYAN);
-  tft.setCursor(MARGIN + 3 * (BOX_WIDTH + SPACING) + 15, tft.height() - BOX_HEIGHT + 25);
-  tft.setTextSize(1);
-  tft.print(number);   
+  double ft = (t * 9.0/5.0) + 32;
+  double HI = -42.379 + (2.04901523 * ft) + (10.14333127 * h) + (-0.22475541 * ft * h) + (-0.00683783 * pow(ft, 2))  + (-0.05481717 * pow(h,2)) + (0.00122874 * pow(ft, 2) * h)  + (0.00085282 * ft * pow(h,2)) + (-0.00000199 * pow(ft, 2) * pow(h,2));
+  hI =  (5.0/9.0) * (HI - 32);
+  return hI;
 }
- 
- 
-void checkPasscode(void){
-    // THE APPROPRIATE ROUTE IN THE BACKEND COMPONENT MUST BE CREATED BEFORE THIS FUNCTION CAN WORK
-    WiFiClient client;
-    HTTPClient http;
-
-    if(WiFi.status()== WL_CONNECTED){ 
-      
-      // 1. REPLACE LOCALHOST IN THE STRING BELOW WITH THE IP ADDRESS OF THE COMPUTER THAT YOUR BACKEND IS RUNNING ON
-      http.begin(client, "http://172.16.192.48:8080/api/check/combination"); // Your Domain name with URL path or IP address with path 
- 
-      
-      http.addHeader("Content-Type", "application/x-www-form-urlencoded"); // Specify content-type header      
-      char message[20];  // Store the 4 digit passcode that will be sent to the backend for validation via HTTP POST
-      
-      // 2. Insert all four (4) digits of the passcode into a string with 'passcode=1234' format and then save this modified string in the message[20] variable created above 
-      
-      sprintf(message, "passcode=%d%d%d%d", d1, d2, d3, d4);
-                      
-      int httpResponseCode = http.POST(message);  // Send HTTP POST request and then wait for a response
-
-      if (httpResponseCode > 0) {
-        Serial.print("HTTP Response code: ");
-        Serial.println(httpResponseCode);
-        String received = http.getString();
-       
-        // 3. CONVERT 'received' TO JSON. 
-
-        StaticJsonDocument<1000> doc;
-        DeserializationError error = deserializeJson(doc, received);
-
-        if (error) {
-          Serial.print("deserializeJson() failed: ");
-          Serial.println(error.c_str());
-          return;
-        }
-        
-
-        // 4. PROCESS MESSAGE. The response from the route that is used to validate the passcode
-        // will be either {"status":"complete","data":"complete"}  or {"status":"failed","data":"failed"} schema.
-        // (1) if the status is complete, set the lockState variable to true, then invoke the showLockState function
-        // (2) otherwise, set the lockState variable to false, then invoke the showLockState function
-
-        const char* status = doc["status"];
-
-        if(strcmp(status, "success") == 0){
-          lockState = true;
-          showLockState();
-        }
-        else{
-          lockState = false;
-          showLockState();
-
-        }
-              
-      }     
-        
-      // Free resources
-      http.end();
-
-    }
-             
- }
 
 
-
-void showLockState(void){
-  
-    // Toggles the open and close lock images on the screen based on the lockState variable  
-    tft.setFont(&FreeSansBold9pt7b);  
-    tft.setTextSize(1);
-    
-
-    if(lockState == true){
-      tft.drawRGBBitmap(68,10, lockopen, 104, 97); 
-      tft.setCursor(50, 200);  
-      tft.setTextColor(ILI9341_WHITE); 
-      tft.printf("Access Denied"); 
-      tft.setCursor(50, 200);  
-      tft.setTextColor(ILI9341_GREEN); 
-      tft.printf("Access Granted");
-      
-    }
-    else {
-      tft.drawRGBBitmap(68,10, lockclose, 104, 103); 
-      tft.setCursor(50, 200);  
-      tft.setTextColor(ILI9341_WHITE); 
-      tft.printf("Access Granted"); 
-      tft.setCursor(50, 200);  
-      tft.setTextColor(ILI9341_RED); 
-      tft.printf("Access Denied"); 
-    }
-    
+double calcSoilValue(){    
+  soilVal = analogRead(soil_m);
+  conVal = map(soilVal, 1500, 3000, 100, 0);
+  if (conVal < 0)
+  {
+    conVal = 0;
+  }
+  else if (conVal >= 100)
+  {
+    conVal = 100;
+  }  
+  return conVal; 
 }
- 

@@ -27,103 +27,223 @@ from markupsafe import escape
 #####################################
 
 
-# 1. CREATE ROUTE FOR '/api/set/combination'
-@app.route('/api/set/combination', methods=['POST'])
-def update_passcode():
-    passcode = request.json.get('code')
-    print(f"Passcode received: {passcode}")
-    
-    try:
-        if mongo.setPass(passcode):  
-            return jsonify({"status": "complete", "data": "Passcode updated"})
-    except Exception as e:
-        print(f"update_passcode error: {e}")
-    
-    return jsonify({"status": "failed", "data": "Database update failed"})
+# 1. CREATE ROUTE FOR 'temperature'
+@app.route('/api/mmar/temperature/<start>/<end>', methods=['GET']) 
+def gettemperatureMMAR(start, end):
+        '''RETURNS MIN, MAX, AVG AND RANGE FOR TEMPERATURE. THAT FALLS WITHIN THE START AND END DATE RANGE'''
+        start = int(start)
+        end = int(end)
+            # remotedb 	= self.remoteMongo('mongodb://%s:%s@%s:%s' % (self.username, self.password,self.server,self.port), tls=self.tls)
+        print(type(start))
+        print(type(end))
+        print(start)            
+        print(end)
+        if request.method == "GET":
+            try:
+                val= mongo.temperatureMMAR(start, end)
+                print(f"val: {val}")
+                if val:
 
-# 2. CREATE ROUTE FOR '/api/check/combination'
-@app.route('/api/check/combination', methods=['POST'])
-def check_passcode():
-    """Checks if the passcode is correct"""
-    try:
-        passcode = request.form.get('passcode')
-        if passcode and mongo.count_passcodes(passcode) != 0:
-            return jsonify({"status": "success", "data": "complete"})
-    except Exception as e:
-        print(f"check_passcode error: {e}")
-    
-    return jsonify({"status": "failed", "data": "failed"})
+                    return jsonify({"status":"found","data":val})
+                    print("No data")
+            except Exception as e:
+                msg = str(e)
+                print(f"get_all error: f{str(e)}")
 
-# 3. CREATE ROUTE FOR '/api/update'
-@app.route('/api/update', methods=['POST'])
-def update_radar():
-    """Updates the 'radar' collection"""
-    try:
-        jsonDoc = request.get_json()
-        jsonDoc['timestamp'] = floor(datetime.now().timestamp())
-        
-        mqtt_payload = mongo.dumps(jsonDoc)
-        Mqtt.publish("620160532", mqtt_payload)
-        Mqtt.publish("620160532_sub", mqtt_payload)
-        
-        print(f"MQTT: {jsonDoc}")
-        
-        if mongo.insertData(jsonDoc):
-            return jsonify({"status": "complete", "data": "complete"})
-    except Exception as e:
-        print(f"update_radar error: {e}")
-    
-    return jsonify({"status": "failed", "data": "failed"})
+        return jsonify({"status":"not found","data":[]})
 
-# 4. CREATE ROUTE FOR '/api/reserve/<start>/<end>'
-@app.route('/api/reserve/<int:start>/<int:end>', methods=['GET'])
-def get_reserve_radar(start, end):
-    """Returns the 'reserve' field using all documents found between start and end timestamps"""
-    try:
-        result = list(mongo.retrieve_radar(start, end))
-        if result:
-            return jsonify({"status": "success", "data": result})
-    except Exception as e:
-        print(f"get_reserve_radar error: {e}")
-    
-    return jsonify({"status": "failed", "data": "failed"})
+# 2. CREATE ROUTE FOR 'humidity'
+@app.route('/api/mmar/humidity/<start>/<end>', methods=['GET'])
+def gethumidityMMAR(start, end):
+        '''RETURNS MIN, MAX, AVG AND RANGE FOR HUMIDITY. THAT FALLS WITHIN THE START AND END DATE RANGE'''
+        start= int(start)
+        end= int(end)
 
-# 5. CREATE ROUTE FOR '/api/avg/<start>/<end>'
-@app.route('/api/avg/<int:start>/<int:end>', methods=['GET'])
-def get_average_radar(start, end):
-    """Returns the average of the 'reserve' field using documents found between start and end timestamps"""
-    try:
-        result = list(mongo.average_radar(start, end))
-        if result:
-            return jsonify({"status": "success", "data": result})
-    except Exception as e:
-        print(f"get_average_radar error: {e}")
-    
-    return jsonify({"status": "failed", "data": "failed"})
+        if request.method == "GET":
+            try:
+                val= mongo.humidityMMAR(start, end)
+                if val:
+                    return jsonify({"status":"found","data":val})
+            
+            except Exception as e:
+                msg = str(e)
+                print(f"get_all error: f{str(e)}")
+
+            return jsonify({"status":"not found","data":[]})
+
+
+
+# 3. CREATE ROUTE FOR 'pressure'
+@app.route('/api/mmar/pressure/<start>/<end>', methods=['GET'])
+def getpressureMMAR(start, end):
+        '''RETURNS MIN, MAX, AVG AND RANGE FOR PRESSURE. THAT FALLS WITHIN THE START AND END DATE RANGE'''
+        start= int(start)
+        end= int(end)
+        print(f"Start Date: {start}")
+        print(f"End Date: {end}")
+
+        if request.method == "GET":
+            try:
+                val= mongo.pressureMMAR(start, end)
+                if val:
+                    return jsonify({"status":"found","data":val})
+            
+            except Exception as e:
+                msg = str(e)
+                print(f"get_all error: f{str(e)}")
+
+            return jsonify({"status":"not found","data":[]})
+
+# 4. CREATE ROUTE FOR 'altitude'
+@app.route('/api/mmar/altitude/<start>/<end>', methods=['GET'])
+def getaltitudeMMAR(start, end):
+        '''RETURNS MIN, MAX, AVG AND RANGE FOR HUMIDITY. THAT FALLS WITHIN THE START AND END DATE RANGE'''
+        start= int(start)
+        end= int(end)
+
+        if request.method == "GET":
+            try:
+                val= mongo.altitudeMMAR(start, end)
+                if val:
+                    return jsonify({"status":"found","data":val})
+            
+            except Exception as e:
+                msg = str(e)
+                print(f"get_all error: f{str(e)}")
+
+            return jsonify({"status":"not found","data":[]})
+
+# 5. CREATE ROUTE FOR 'soil moisture'
+@app.route('/api/mmar/soilmoisture/<start>/<end>', methods=['GET'])
+def getsoilmoistureMMAR(start, end):
+        '''RETURNS MIN, MAX, AVG AND RANGE FOR SOIL MOISTURE. THAT FALLS WITHIN THE START AND END DATE RANGE'''
+        start= int(start)
+        end= int(end)
+
+        if request.method == "GET":
+            try:
+                val= mongo.soilmoistureMMAR(start, end)
+                if val:
+                    return jsonify({"status":"found","data":val})
+            
+            except Exception as e:
+                msg = str(e)
+                print(f"get_all error: f{str(e)}")
+
+            return jsonify({"status":"not found","data":[]})
 
 # 6. SERVE FILE FROM UPLOADS DIRECTORY
-@app.route('/api/file/get/<filename>', methods=['GET']) 
-def get_images(filename):
-    """Returns requested file from uploads folder"""
-    directory = join(getcwd(), Config.UPLOADS_FOLDER)
-    file_path = join(directory, filename)
-    
-    if exists(file_path):
-        return send_from_directory(directory, filename)
-    
-    return jsonify({"status": "file not found"}), 404
+@app.route('/api/weatherstation/get/<start>/<end>', methods=['GET']) 
+def get_all(start,end):   
+    '''RETURNS ALL THE DATA FROM THE DATABASE THAT EXIST IN BETWEEN THE START AND END TIMESTAMPS'''
+    start= int(start)
+    end= int(end)
+   
+    if request.method == "GET":
+        try:
+            val= mongo.getAllInRange(start, end)
+        
+            if val:
+                return jsonify({"status":"found","data":val})
+        
+        except Exception as e:
+            msg = str(e)
+            print(f"get_all error: f{str(e)}")
+
+    return jsonify({"status":"not found","data":[]})
+
+
 
 # 7. UPLOAD FILE TO UPLOADS DIRECTORY
-@app.route('/api/file/upload', methods=['POST'])  
-def upload():
-    """Saves a file to the uploads folder"""
-    file = request.files.get('file')
-    if not file:
-        return jsonify({"status": "failed", "data": "No file provided"})
+@app.route('/api/frequency/<variable>/<start>/<end>', methods=['GET'])
+def getfrequencyDistro(variable,start, end):
+    '''RETURNS THE FREQUENCY DISTROBUTION FOR A SPECIFIED VARIABLE WITHIN THE START AND END DATE RANGE'''
+    start= int(start)
+    end= int(end)
     
-    filename = secure_filename(file.filename)
-    file.save(join(getcwd(), Config.UPLOADS_FOLDER, filename))
-    return jsonify({"status": "File upload successful", "filename": filename})
+    if request.method == "GET":
+        try:
+            val= mongo.frequencyDistro(variable, start, end)
+        
+            if val:
+                return jsonify({"status":"found","data":val})
+        
+        except Exception as e:
+            msg = str(e)
+            print(f"get_all error: f{str(e)}")
+
+    return jsonify({"status":"not found","data":[]})
+
+
+@app.route('/api/file/get/<filename>', methods=['GET']) 
+def get_images(filename):   
+    '''Returns requested file from uploads folder'''
+   
+    if request.method == "GET":
+        directory   = join( getcwd(), Config.UPLOADS_FOLDER) 
+        filePath    = join( getcwd(), Config.UPLOADS_FOLDER, filename) 
+
+        # RETURN FILE IF IT EXISTS IN FOLDER
+        if exists(filePath):        
+            return send_from_directory(directory, filename)
+        
+        # FILE DOES NOT EXIST
+        return jsonify({"status":"file not found"}), 404
+
+
+@app.route('/api/file/upload',methods=["POST"])  
+def upload():
+    '''Saves a file to the uploads folder'''
+    
+    if request.method == "POST": 
+        file     = request.files['file']
+        filename = secure_filename(file.filename)
+        file.save(join(getcwd(),Config.UPLOADS_FOLDER , filename))
+        return jsonify({"status":"File upload successful", "filename":f"{filename}" })
+
+# POST DATA TO MONGO DATABASE 
+@app.route('/api/update', methods=['POST']) 
+def update_weather():      
+    if request.method == "POST":
+        try:
+            jsonDoc= request.get_json()
+            print("Received JSON:", jsonDoc)  # Debug log
+            # Update the document in the 'weatherstation' collection with the new data
+            jsonDoc['Temperature'] = jsonDoc.get('celsTemperature', jsonDoc.get('bmp_temp'))
+            jsonDoc['Farenheit'] = jsonDoc.get('fahrTemperature')
+            jsonDoc['Humidity'] = jsonDoc.get('humidity')
+            jsonDoc['Heat Index C'] = jsonDoc.get('heatindex')
+            jsonDoc['Soil Moisture'] = jsonDoc.get('soilMoisture')
+            jsonDoc['Pressure'] = jsonDoc.get('pressure')
+            jsonDoc['Altitude'] = jsonDoc.get('altitude')
+
+            timestamp = datetime.now().timestamp()
+            timestamp = floor(timestamp)
+            jsonDoc['timestamp'] = timestamp
+
+            Mqtt.publish("620160532",mongo.dumps(jsonDoc))
+            Mqtt.publish("620160532_pub",mongo.dumps(jsonDoc))
+            Mqtt.publish("620160532_sub",mongo.dumps(jsonDoc))
+
+            print(f"MQTT: {jsonDoc}")
+
+            item = mongo.addUpdate(jsonDoc)
+            if item:
+                return jsonify({"status": "complete", "data": "complete"})
+        except Exception as e:
+            msg = str(e)
+            print(f"update Error: {msg}")
+        return jsonify({"status": "failed", "data": "failed"})
+
+
+
+
+
+@app.route('/<file_name>.txt')
+def send_text_file(file_name):
+    """Send your static text file."""
+    file_dot_text = file_name + '.txt'
+    return app.send_static_file(file_dot_text)
 
 # GLOBAL FLASK SETTINGS
 @app.after_request
