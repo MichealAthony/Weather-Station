@@ -1,11 +1,11 @@
 # Internet of Things (IoT) Template - Home Automation and Analysis
 
 ### Description
-The Hardware component has two tasks: (1) Implement a remote authentication sub-system as part of a Home Automation System, for the main entrance of a Smart Home. This enables home owners to grant temporary access to their home, by providing their guest with a 4 digit passcode. Subsequently, the pin can be change remotely, after the guest leaves. (2) A real-time water management sub-system for the Home Automation System, to monitor the water levels of a 1000 US Gal storage tank located on the compound.
+The hardware component has two tasks: (1) Implement a remote weather monitoring sub-system that collects and transmits real-time meteorological data, enabling continuous observation of environmental conditions. 
 
-The Backend component also has two tasks: (1) Store data sent via HTTP POST request from the Arduino Nano in a database. This database should adhere to a specified schema. (2) Facilitate the access of stored data by the hardware and frontend. This should be accomplished through the implementation of API routes on the frontend and HTTP GET request from the hardware (ESP32) component.
+The Backend component also has two tasks: (1) Store data sent via HTTP POST request from the Arduino Nano in a database. This database adheres to a specified schema. (2) Facilitate the access of stored data by the hardware and frontend. This is accomplished through the implementation of API routes on the frontend and HTTP GET request from the hardware (ESP32) component.
 
-The Frontend component is tasked with: (1) Provide a User Interface (UI), on a webpage, for setting a 4 digit passcode used by the Remote authentication system’s hardware component to control access at the main entrance. (2) Provide a user interface (UI), on a webpage, featuring charts and graphs to display real-time status of the Water Management System. (3) Another webpage, which should integrate a visual representation, such as a chart or graph, extracting trends and illustrating any correlation among variables, from data stored in the database.  
+The Frontend component is tasked with: (1) Provide a User Interface (UI), on a webpage, (2) Provide a user interface (UI), on a webpage, featuring charts and graphs to display real-time status of the Water Management System. (3) Another webpage, which should integrate a visual representation, such as a chart or graph, extracting trends and illustrating any correlation among variables, from data stored in the database.  
 
 
 # Hardware Setup
